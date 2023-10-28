@@ -17,11 +17,12 @@ GITHUB_API_VERSION = '2022-11-28'
 HEADERS = {'Accept': ACCEPT, 'Authorization': AUTHORISATION, 'X-GitHub-Api-Version': GITHUB_API_VERSION}
 
 query = sys.argv[1]
+num_pages = sys.argv[2]
 url = f'https://api.github.com/search/code?q={query}&ref=advsearch&per_page=100&page='
 
 repos = {}
 with requests.session() as s:
-    for page in range(1, 11):
+    for page in range(1, num_pages+1):
         while True: # sleep the timeout
             res = s.get(url + str(page), headers=HEADERS)
             if res.status_code != 200:
@@ -36,13 +37,12 @@ with requests.session() as s:
                 continue
             repo_name = repo['repository']['full_name']
             repo_id = repo['repository']['id']
-            # repo_url = repo['repository']['html_url']
             repos[str(repo_id) + repo_path] = (repo_name, repo_path)
 
 print(f'{len(list(repos.keys()))} repositories found.')
 print('writing to file...', end='')
 
-with open(f'output/{datetime.now()}.txt', 'w') as f:
+with open(f'output/{query}_{num_pages * 100}.txt', 'w') as f:
     for repo_url, repo_path in repos.values():
         f.write(f'{repo_url} {repo_path}\n')
 print('done.')
