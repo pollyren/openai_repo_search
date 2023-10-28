@@ -160,6 +160,7 @@ cython_debug/
 #.idea/
 
 github_token
+openai_token
 output/
 *.json
 .DS_Store
