@@ -13,19 +13,23 @@ file_contents = {}
 repos = []
 for line in file.readlines():
     try:
-        repo_name, repo_path = line.strip().split(' ')
+        repo_name, repo_path = line.strip().split(' ', 1)
+        repo_path = repo_path.replace(' ', '%20')
     except:
         print(f'unable to split line: {line}')
         continue
 
-    link = f'https://raw.githubusercontent.com/{repo_name}/main/{repo_path}'
-    if requests.get(link).status_code > 400:
-        link = f'https://raw.githubusercontent.com/{repo_name}/master/{repo_path}'
+    try:
+        link = f'https://raw.githubusercontent.com/{repo_name}/main/{repo_path}'
         if requests.get(link).status_code > 400:
-            continue
-    repo_fn = f'{repo_name}/{repo_path}'.replace('/','_')
-    wget.download(link, 'repos/'+repo_fn)
-    repos.append(repo_fn)
+            link = f'https://raw.githubusercontent.com/{repo_name}/master/{repo_path}'
+            if requests.get(link).status_code > 400:
+                continue
+        repo_fn = f'{repo_name}/{repo_path}'.replace('/','_')
+        wget.download(link, 'repos/'+repo_fn)
+        repos.append(repo_fn)
+    except:
+        continue
 
 with open('repos/repos.txt', 'a') as f:
     for repo in repos:
