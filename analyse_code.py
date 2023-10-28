@@ -11,10 +11,11 @@ file = open(f'output/{file_name}', 'r')
 
 file_contents = {}
 repos = []
-for line in file.readlines()[:5]:
+for line in file.readlines():
     try:
         repo_name, repo_path = line.strip().split(' ')
     except:
+        print(f'unable to split line: {line}')
         continue
 
     link = f'https://raw.githubusercontent.com/{repo_name}/main/{repo_path}'
