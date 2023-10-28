@@ -27,10 +27,10 @@ for line in file.readlines():
                 continue
         repo_fn = f'{repo_name}/{repo_path}'.replace('/','_')
         wget.download(link, 'repos/'+repo_fn)
-        repos.append(repo_fn)
+        repos.append((repo_fn, repo_name, repo_path))
     except:
         continue
 
 with open('repos/repos.txt', 'a') as f:
     for repo in repos:
-        f.write(repo + '\n')
+        f.write(str(repo) + '\n')
