@@ -17,7 +17,7 @@ GITHUB_API_VERSION = '2022-11-28'
 HEADERS = {'Accept': ACCEPT, 'Authorization': AUTHORISATION, 'X-GitHub-Api-Version': GITHUB_API_VERSION}
 
 query = sys.argv[1]
-num_pages = sys.argv[2]
+num_pages = int(sys.argv[2])
 url = f'https://api.github.com/search/code?q={query}&ref=advsearch&per_page=100&page='
 
 repos = {}
