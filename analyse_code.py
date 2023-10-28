@@ -1,63 +1,31 @@
 #!/usr/bin/env python3
 
 import requests
-import json
-import base64
-from bs4 import BeautifulSoup
-from pathlib import Path
-import time
 import sys
-from datetime import datetime
-
-with open('github_token', 'r') as f:
-    TOKEN = f.readline().strip()
-
-ACCEPT = 'application/vnd.github+json'
-AUTHORISATION = f'Bearer {TOKEN}'
-GITHUB_API_VERSION = '2022-11-28'
-HEADERS = {'Accept': ACCEPT, 'Authorization': AUTHORISATION, 'X-GitHub-Api-Version': GITHUB_API_VERSION}
-
-def read_github_file(url):
-    response = requests.get(url, headers=HEADERS)
-    print(response.text)
-    # print(type(json.loads(response.text)))
-    return json.loads(response.text)
-    # else:
-    #     raise Exception(f'Failed to fetch content from {url} with error code {response.status_code}')
+import wget
+from urllib.request import urlopen
 
 file_name = sys.argv[1]
 
 file = open(f'output/{file_name}', 'r')
 
 file_contents = {}
+repos = []
 for line in file.readlines()[:5]:
     try:
         repo_name, repo_path = line.strip().split(' ')
     except:
         continue
 
-    link = f'https://api.github.com/repos/{repo_name}/contents/{repo_path}?ref=main'
-    github_json = read_github_file(link)
-    if 'content' in github_json:
-        content = base64.b64decode(github_json['content']).decode('utf-8')
-        print(content)
-    else:
-        link = f'https://api.github.com/repos/{repo_name}/contents/{repo_path}?ref=master'
-        github_json = read_github_file(link)
-        if 'content' in github_json:
-            content = base64.b64decode(github_json['content']).decode('utf-8')
-            print(content)
-        else: 
-            print('oop')
+    link = f'https://raw.githubusercontent.com/{repo_name}/main/{repo_path}'
+    if requests.get(link).status_code > 400:
+        link = f'https://raw.githubusercontent.com/{repo_name}/master/{repo_path}'
+        if requests.get(link).status_code > 400:
             continue
+    repo_fn = f'{repo_name}/{repo_path}'.replace('/','_')
+    wget.download(link, 'repos/'+repo_fn)
+    repos.append(repo_fn)
 
-    if content is not None:
-        # print(link)
-        # print(content)
-        file_contents[link] = content
-
-count = 0
-for link, content in file_contents.items():
-    print(f"File from {link}:\n{content}")
-    count += 1
-    if count > 5: break
+with open('repos/repos.txt', 'a') as f:
+    for repo in repos:
+        f.write(repo + '\n')
