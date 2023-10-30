@@ -11,12 +11,12 @@ import openai
 
 def create_prompt(code):
     prompt = r'''
-    Please answer the following questions regarding the code. Please indicate the question each portions of the response is answering. Please do not use any additional sentences providing explanation other that what is asked by the question. Each question should be answerable in less than 20 words. Do not answer in complete sentences. There is an example below for what a response should look like. 
-    1. Does the ChatCompletions API call use both a system and user for the conversation? 
-    2. Which inputs are static and which are dynamic? Please indicate whether the inputs are for the system or for the user. A static input refers to a constant string, while a dynamic input uses user input and variables to create the string.
-    3. How many static words are in the user content prompt? How many dynamic tokens are in the user input?
-    4. Where are the dynamic tokens located within the prompt template? Are they located at the beginning of the template, in the middle, or at the end?
-    5. How many steps are there between the command line input and the final dynamic tokens? What types of steps are they (i.e., concatenation, slicing, random generator)?
+    Please answer the following questions regarding the code. Please indicate the question each portions of the response is answering. Please do not use any additional sentences providing explanation other that what is asked by the question. Each question should be answerable in less than 20 words. Do not answer in complete sentences. Do not repeat the question back to me. There is an example below for what a response should look like. 
+    1. Yes or No: Does the ChatCompletions API call use both a system and user for the conversation? 
+    2. Is the user input static or dynamic? A static input refers to a constant string, while a dynamic input uses user input and variables to create the string. Dynamic inputs are variables taken from the command line that are inserted into the message string, typically by using format strings or concatenation. Function parameters are not dynamic tokens.
+    3. If the prompt is in English, how many static words are in the user content prompt? If it is not in English, return "Not English".
+    4. Where are the dynamic tokens located within the prompt template? Are they located at the beginning of the template, in the middle, or at the end? Return N/A only if the user prompt is static.
+    5. How many steps are there between the command line input and the final dynamic tokens? What types of steps are they (i.e., concatenation, slicing, random generator)? If there are no steps, return 0. Return N/A only if the user prompt is static.
 
     Example 1: 
     #!/usr/bin/env python3
@@ -101,9 +101,9 @@ def create_prompt(code):
     sys.stdout.write(f"\n{completed_command.replace(prompt_prefix, '', 1)}")
     An example response to Example 1 would be as follows:
     1. Yes.
-    2. The system prompt is static. The user prompt is dynamic. The dynamic variables for the user prompt are 
-    3. 5 static word in user input.
-    4. At the end of the user prompt.
+    2. Dynamic. The dynamic variable is `buffer`.
+    3. 5.
+    4. End.
     5. There are 3 total operations: 2 slicing operations of the command line input, 1 concatenation operation on the two results. 
 
     Example 2: 
@@ -153,10 +153,64 @@ def create_prompt(code):
             file.write(code)
     An example response to Example 2 would be as follows:
     1. No.
-    2. No system prompt. The user prompt is dynamic. The dynamic variables for the user prompt is `path`.
-    3. There are 23 static words in the user input.
-    4. The dynamic tokens are located in the middle of the user prompt.
+    2. Dynamic. The dynamic variables for the user prompt is `path`.
+    3. 23.
+    4. Middle.
     5. There are 2 steps between the command line input and the final dynamic tokens. The steps are: reading the code from the file and inserting the code into the prompt.
+
+    Example 3: 
+    import openai
+
+    # openai.log = "debug"
+    openai.api_key = "sk-"
+    openai.api_base = "https://api.chatanywhere.com.cn/v1"
+
+
+
+    # 非流式响应
+    # completion = openai.ChatCompletion.create(model="gpt-3.5-turbo", messages=[{"role": "user", "content": "Hello world!"}])
+    # print(completion.choices[0].message.content)
+
+    def gpt_35_api_stream(messages: list):
+        """为提供的对话消息创建新的回答 (流式传输)
+
+        Args:
+            messages (list): 完整的对话消息
+            api_key (str): OpenAI API 密钥
+
+        Returns:
+            tuple: (results, error_desc)
+        """
+        try:
+            response = openai.ChatCompletion.create(
+                model='gpt-3.5-turbo',
+                messages=messages,
+                stream=True,
+            )
+            completion = {'role': '', 'content': ''}
+            for event in response:
+                if event['choices'][0]['finish_reason'] == 'stop':
+                    print(f'收到的完成数据: {completion}')
+                    break
+                for delta_k, delta_v in event['choices'][0]['delta'].items():
+                    print(f'流响应数据: {delta_k} = {delta_v}')
+                    completion[delta_k] += delta_v
+            messages.append(completion)  # 直接在传入参数 messages 中追加消息
+            return (True, '')
+        except Exception as err:
+            return (False, f'OpenAI API 异常: {err}')
+
+    if __name__ == '__main__':
+        messages = [{'role': 'user','content': '鲁迅和周树人的关系'},]
+        print(gpt_35_api_stream(messages))
+        print(messages)
+
+    An example response to Example 3 would be as follows:
+    1. No.
+    2. Static. 
+    3. Not English.
+    4. N/A.
+    5. N/A.
     '''
     return f'The following is a piece of code: {code}\n' + prompt
 
@@ -167,11 +221,17 @@ openai.api_key = OPENAI_KEY
 with open('repos/repos.txt', 'r') as f:
     lines = f.readlines()
 
-for line in lines:
+for i, line in enumerate(lines):
+    if i<5: continue
     fn, repo_name, repo_path = line.strip()[1:-1].split(', ')
     fn = fn[1:-1]
+    if fn[-6:] == '.ipynb':
+        # skip jupyter notebooks for now because they are too large
+        continue
     repo_name = repo_name[1:-1]
     repo_path = repo_path[1:-1]
+    print(f'====={repo_name}/{repo_path}======')
+
     with open(f'repos/{fn}', 'r') as f:
         code = f.read()
     completion = openai.ChatCompletion.create(
@@ -183,3 +243,4 @@ for line in lines:
         ]
     )
     print(completion.choices[0].message.content)
+    if i==7: exit(0)
