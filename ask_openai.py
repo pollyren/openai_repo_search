@@ -1,23 +1,21 @@
 #!/usr/bin/env python3
 
-import requests
-import json
 from bs4 import BeautifulSoup
 from pathlib import Path
-import time
-import sys
 from datetime import datetime
 import openai
+import pandas as pd
+import re
 
 def create_prompt(code):
     prompt = r'''
     Please answer the following questions regarding the code. Please indicate the question each portions of the response is answering. Please do not use any additional sentences providing explanation other that what is asked by the question. Each question should be answerable in less than 20 words. Do not answer in complete sentences. Do not repeat the question back to me. There is an example below for what a response should look like. 
-    1. Yes or No: Does the ChatCompletions API call use both a system and user for the conversation? 
-    2. Is the user input static or dynamic? A static input refers to a constant string, while a dynamic input uses user input and variables to create the string. Dynamic inputs are variables taken from the command line that are inserted into the message string, typically by using format strings or concatenation. Function parameters are not dynamic tokens.
-    3. If the prompt is in English, how many static words are in the user content prompt? If it is not in English, return "Not English".
-    4. Where are the dynamic tokens located within the prompt template? Are they located at the beginning of the template, in the middle, or at the end? Return N/A only if the user prompt is static.
-    5. How many steps are there between the command line input and the final dynamic tokens? What types of steps are they (i.e., concatenation, slicing, random generator)? If there are no steps, return 0. Return N/A only if the user prompt is static.
-
+    1) Yes or No: Does the ChatCompletions API call use both a system and user for the conversation? 
+    2) Is the user message static or dynamic? A static message refers to a constant string, while a dynamic message uses user input and variables to create the string. Dynamic inputs are variables taken from the command line that are inserted into the message string, typically by using format strings or concatenation. Function parameters are not dynamic tokens.
+    3) If the prompt is in English, how many static words are in the user content prompt? If it is not in English, return "Not English".
+    4) Where are the dynamic tokens located within the prompt template? Are they located at the beginning of the template, in the middle, or at the end? Return N/A only if the user prompt is static.
+    5) How many steps are there between the command line input and the final dynamic tokens? What types of steps are they (i.e., concatenation, slicing, random generator)? If there are no steps, return 0. Return N/A only if the user prompt is static.
+    //which part is dynamic vs static 
     Example 1: 
     #!/usr/bin/env python3
 
@@ -100,11 +98,11 @@ def create_prompt(code):
 
     sys.stdout.write(f"\n{completed_command.replace(prompt_prefix, '', 1)}")
     An example response to Example 1 would be as follows:
-    1. Yes.
-    2. Dynamic. The dynamic variable is `buffer`.
-    3. 5.
-    4. End.
-    5. There are 3 total operations: 2 slicing operations of the command line input, 1 concatenation operation on the two results. 
+    1) Yes.
+    2) Dynamic. The dynamic variable is `buffer`.
+    3) 5.
+    4) End.
+    5) There are 3 total operations: 2 slicing operations of the command line input, 1 concatenation operation on the two results. 
 
     Example 2: 
     import sys, re
@@ -152,11 +150,11 @@ def create_prompt(code):
         with open(path, "w") as file:
             file.write(code)
     An example response to Example 2 would be as follows:
-    1. No.
-    2. Dynamic. The dynamic variables for the user prompt is `path`.
-    3. 23.
-    4. Middle.
-    5. There are 2 steps between the command line input and the final dynamic tokens. The steps are: reading the code from the file and inserting the code into the prompt.
+    1) No.
+    2) Dynamic. The dynamic variables for the user prompt is `path`.
+    3) 23.
+    4) Middle.
+    5) There are 2 steps between the command line input and the final dynamic tokens. The steps are: reading the code from the file and inserting the code into the prompt.
 
     Example 3: 
     import openai
@@ -206,13 +204,58 @@ def create_prompt(code):
         print(messages)
 
     An example response to Example 3 would be as follows:
-    1. No.
-    2. Static. 
-    3. Not English.
-    4. N/A.
-    5. N/A.
+    1) No.
+    2) Static. 
+    3) Not English.
+    4) N/A.
+    5) N/A.
     '''
     return f'The following is a piece of code: {code}\n' + prompt
+
+def transform_answers(answers):
+    res = (0, 0, [], 0, 0, 0)
+    try: 
+        q1, q2, q3, q4, q5 = answers
+    except:
+        raise Exception(f'unable to transform answers: {answers}')
+    
+    if q1 == 'Yes.':
+        res[0] = 1
+    elif q1 == 'No.':
+        pass
+    else:
+        raise Exception(f'invalid answers to question 1: {q1}')
+    
+    q2_split = q2.split(' ')
+    if q2_split[0] == 'Dynamic.':
+        res[1] = 1
+    elif q2_split[0] == 'Static.':
+        pass
+    else:
+        raise Exception(f'invalid answers to question 2: {q2}')
+    for word in q2_split:
+        if '`' in word:
+            res[2].append(word)
+
+    if q3 == 'Not English.':
+        res[3] = -1
+    else:
+        res[3] = int(q3[:-1])
+
+    if q4 == 'Beginning.':
+        res[4] = 0
+    elif q4 == 'Middle.':
+        res[4] = 1
+    elif q4 == 'End.':
+        res[4] = 2
+    else:
+        raise Exception(f'invalid answers to question 4: {q4}')
+    
+    steps_pattern = r'(\d+)\s+steps'
+    steps_match = re.search(steps_pattern, q5)
+    res[5] = int(steps_match.group(1))
+    
+    return res
 
 with open('openai_token', 'r') as f:
     OPENAI_KEY = f.readline().strip()
@@ -221,26 +264,61 @@ openai.api_key = OPENAI_KEY
 with open('repos/repos.txt', 'r') as f:
     lines = f.readlines()
 
-for i, line in enumerate(lines):
-    if i<5: continue
-    fn, repo_name, repo_path = line.strip()[1:-1].split(', ')
-    fn = fn[1:-1]
-    if fn[-6:] == '.ipynb':
-        # skip jupyter notebooks for now because they are too large
-        continue
-    repo_name = repo_name[1:-1]
-    repo_path = repo_path[1:-1]
-    print(f'====={repo_name}/{repo_path}======')
+df = pd.DataFrame(columns=['repo_name', 'repo_path', 'system and user?', 'dynamic?', 'dynamic_vars', 'words', 'beg(0), middle(1), end(2)', 'steps'])
 
-    with open(f'repos/{fn}', 'r') as f:
-        code = f.read()
-    completion = openai.ChatCompletion.create(
-        model='gpt-3.5-turbo',
-        temperature=0.2,
-        messages=[
-            {'role': 'system', 'content': 'You are a helpful code tracer.'}, 
-            {'role': 'user', 'content': create_prompt(code)}
-        ]
-    )
-    print(completion.choices[0].message.content)
-    if i==7: exit(0)
+for line in lines:
+    for i in range(5):
+        fn, repo_name, repo_path = line.strip()[1:-1].split(', ')
+        fn = fn[1:-1]
+        with open(f'repos/{fn}', 'r') as f:
+            code = f.read()
+            completion = openai.ChatCompletion.create(
+                model='gpt-3.5-turbo',
+                temperature=0.2,
+                messages=[
+                    {'role': 'system', 'content': 'You are a helpful code tracer.'}, 
+                    {'role': 'user', 'content': create_prompt(code)}
+                ]
+            )
+            print(completion.choices[0].message.content)
+    exit(0)
+
+# for i, line in enumerate(lines):
+#     fn, repo_name, repo_path = line.strip()[1:-1].split(', ')
+#     fn = fn[1:-1]
+#     if fn[-6:] == '.ipynb':
+#         # skip jupyter notebooks for now because they are too large
+#         continue
+#     repo_name = repo_name[1:-1]
+#     repo_path = repo_path[1:-1]
+#     print(f'====={repo_name}/{repo_path}======')
+
+#     with open(f'repos/{fn}', 'r') as f:
+#         code = f.read()
+#     completion = openai.ChatCompletion.create(
+#         model='gpt-3.5-turbo',
+#         temperature=0.2,
+#         messages=[
+#             {'role': 'system', 'content': 'You are a helpful code tracer.'}, 
+#             {'role': 'user', 'content': create_prompt(code)}
+#         ]
+#     )
+#     print(completion.choices[0].message.content)
+    
+#     text = completion.choices[0].message.content
+
+#     pattern = r'\d+\)\s(.*?)(?=(\d+\)|$))'
+#     matches = re.findall(pattern, text)
+#     answers = [match[0].strip() for match in matches if match[0].strip()]
+
+#     try:
+#         print(transform_answers(answers))
+#     except: 
+#         print('exiting here')
+#         exit(0)
+#         continue
+#     exit(0)
+
+# run multiple times
+# print the template
+# holdout set with different set
