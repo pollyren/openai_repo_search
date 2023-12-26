@@ -161,6 +161,7 @@ cython_debug/
 
 github_token
 openai_token
+openai_jiang
 output/
 *.json
 .DS_Store
