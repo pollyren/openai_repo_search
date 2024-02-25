@@ -103,20 +103,11 @@ def find_openai_chatcompletions_calls(code):
     finder.visit(tree)
     return finder.relevant_interactions
 
-<<<<<<< HEAD
-def main():
-    line = "('Shaunwei_RealChar_scripts_contrib_create_char.py', 'Shaunwei/RealChar', 'scripts/contrib/create_char.py')"
-    fn, repo_name, repo_path = line.strip()[1:-1].split(', ')
-    fn = fn[1:-1]
-    with open(f'repos/{fn}', 'r') as f:
-        code = f.read()
-=======
 def parse_py_files_from_json(json_file):
     with open(json_file, 'r') as file:
         urls = json.load(file)
     py_urls = [url for url in urls["raw_urls"] if ".py" in url]  # Adjusted to include URLs containing ".py"
     return py_urls
->>>>>>> 16f5e2bee7ab376df4ff2c5b96910c152ab82fc2
 
 def save_results_to_json(results, file_path):
     with open(file_path, 'w') as file:
