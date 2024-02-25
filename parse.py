@@ -8,7 +8,6 @@ class Finder(ast.NodeVisitor):
         self.relevant_interactions = [] 
         self.function_parameters = {}
         self.source_code = source_code
-        self.current_function = None
 
     def visit_Call(self, node: ast.Call):
         if isinstance(node.func, ast.Attribute):
@@ -22,10 +21,10 @@ class Finder(ast.NodeVisitor):
         self.generic_visit(node)
 
     def visit_Assign(self, node: ast.Assign):
-        print('visit assign', node.value)
+        # print('visit assign', node.value)
         for target in node.targets:
             if isinstance(target, ast.Name):
-                print(target.id)
+                # print(target.id)
                 assignment_str = ast.get_source_segment(self.source_code, node.value)
                 self.all_assignments[target.id] = assignment_str
         self.generic_visit(node)
@@ -36,7 +35,7 @@ class Finder(ast.NodeVisitor):
         self.generic_visit(node)
 
     def trace_variable_origin(self, variable, seen_vars: set):
-        print(f'tracing for {variable}')
+        # print(f'tracing for {variable}')
         if variable in seen_vars:
             return
 
@@ -70,7 +69,7 @@ class Finder(ast.NodeVisitor):
 
     def filter_interactions(self):
         if self.target_variable:
-            print('TARGET VARIABlEfJLSFJDL', self.target_variable)
+            # print('TARGET VARIABlEfJLSFJDL', self.target_variable)
             self.trace_variable_origin(self.target_variable, set())
 
     def print_arguments(self, node: ast.Call):
@@ -103,7 +102,7 @@ def find_openai_chatcompletions_calls(code):
     return finder.relevant_interactions
 
 def main():
-    line = "('Significant-Gravitas_AutoGPT_benchmark_agbenchmark_utils_challenge.py', 'Significant-Gravitas/AutoGPT', 'benchmark/agbenchmark/utils/challenge.py')"
+    line = "('Shaunwei_RealChar_scripts_contrib_create_char.py', 'Shaunwei/RealChar', 'scripts/contrib/create_char.py')"
     fn, repo_name, repo_path = line.strip()[1:-1].split(', ')
     fn = fn[1:-1]
     with open(f'repos/{fn}', 'r') as f:
@@ -112,6 +111,8 @@ def main():
     interactions = find_openai_chatcompletions_calls(code)
     for interaction in interactions:
         print(interaction)
+
+    #statistics: position/length, prompt length, number of insertions, position of insertions (exact position and percentage position), percentage of insertions within a prompt, the more flexible the insertions are the better, closer to the beginning
 
 if __name__ == '__main__':
     main()
