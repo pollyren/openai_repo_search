@@ -1,5 +1,7 @@
-#!/usr/bin/env python3
-import ast
+import ast  # Documentation: https://docs.python.org/3/library/ast.html
+import json
+import os
+from urllib.request import urlopen
 
 class Finder(ast.NodeVisitor):
     def __init__(self, source_code: str):
@@ -16,16 +18,16 @@ class Finder(ast.NodeVisitor):
                     isinstance(node.func.value, ast.Attribute) and
                     node.func.value.attr == 'ChatCompletion' and
                     isinstance(node.func.value.value, ast.Name)):
-                print("Found 'ChatCompletion.create' call at line:", node.lineno)
+                # print("Found 'ChatCompletion.create' call at line:", node.lineno)
                 self.print_arguments(node)
                 self.filter_interactions()
         self.generic_visit(node)
 
     def visit_Assign(self, node: ast.Assign):
-        print('visit assign', node.value)
+        # print('visit assign', node.value)
         for target in node.targets:
             if isinstance(target, ast.Name):
-                print(target.id)
+                # print(target.id)
                 assignment_str = ast.get_source_segment(self.source_code, node.value)
                 self.all_assignments[target.id] = assignment_str
         self.generic_visit(node)
@@ -36,7 +38,7 @@ class Finder(ast.NodeVisitor):
         self.generic_visit(node)
 
     def trace_variable_origin(self, variable, seen_vars: set):
-        print(f'tracing for {variable}')
+        # print(f'tracing for {variable}')
         if variable in seen_vars:
             return
 
@@ -70,29 +72,29 @@ class Finder(ast.NodeVisitor):
 
     def filter_interactions(self):
         if self.target_variable:
-            print('TARGET VARIABlEfJLSFJDL', self.target_variable)
+            # print('TARGET VARIABlEfJLSFJDL', self.target_variable)
             self.trace_variable_origin(self.target_variable, set())
 
     def print_arguments(self, node: ast.Call):
-        print("Arguments:")
+        # print("Arguments:")
         for kw in node.keywords:
             if kw.arg == 'messages':
                 if isinstance(kw.value, ast.Name): 
                     self.target_variable = kw.value.id
-                    print("  - Keyword Arg: messages =", ast.dump(kw.value))
+                    # print("  - Keyword Arg: messages =", ast.dump(kw.value))
                 elif isinstance(kw.value, ast.List):
-                    print(f"  - Keyword Arg: messages = [")
+                    # print(f"  - Keyword Arg: messages = [")
                     for _, item in enumerate(kw.value.elts):
                         if isinstance(item, ast.Dict):
-                            print("      {")
+                            # print("      {")
                             for key, value in zip(item.keys, item.values):
                                 key_str = ast.dump(key)
                                 value_str = ast.dump(value)
                                 if isinstance(value, ast.Name) and value.id in self.all_assignments:
                                     self.target_variable = value.id
-                                print(f"        {key_str}: {value_str}")
-                            print("      }")
-                    print("    ]")
+                    #             print(f"        {key_str}: {value_str}")
+                    #         print("      }")
+                    # print("    ]")
             else: 
                 print(f"  - Keyword Arg: {kw.arg} = {ast.dump(kw.value)}")
             
@@ -102,16 +104,38 @@ def find_openai_chatcompletions_calls(code):
     finder.visit(tree)
     return finder.relevant_interactions
 
-def main():
-    line = "('Significant-Gravitas_AutoGPT_benchmark_agbenchmark_utils_challenge.py', 'Significant-Gravitas/AutoGPT', 'benchmark/agbenchmark/utils/challenge.py')"
-    fn, repo_name, repo_path = line.strip()[1:-1].split(', ')
-    fn = fn[1:-1]
-    with open(f'repos/{fn}', 'r') as f:
-        code = f.read()
+def parse_py_files_from_json(json_file):
+    with open(json_file, 'r') as file:
+        urls = json.load(file)
+    py_urls = [url for url in urls["raw_urls"] if ".py" in url]  # Adjusted to include URLs containing ".py"
+    return py_urls
 
-    interactions = find_openai_chatcompletions_calls(code)
-    for interaction in interactions:
-        print(interaction)
+def save_results_to_json(results, file_path):
+    with open(file_path, 'w') as file:
+        json.dump(results, file, indent=4)
+
+def main():
+    # Main processing logic
+    py_urls = parse_py_files_from_json('code_search/raw_data_all.json')
+    # py_urls = ["https://raw.githubusercontent.com/MLNLP-World/AI-Paper-Collector/477ef2aec293e07156f386d7dccd27fa2c1af295/app.py"]
+    results = []
+    
+    for url in py_urls:
+        try:
+            response = urlopen(url)
+            content = response.read().decode('utf-8')
+            interactions = find_openai_chatcompletions_calls(content)
+            results.append({
+                "url": url,
+                "create_calls": interactions
+            })
+        except Exception as e:
+            print(f"Error downloading or parsing {url}: {e}")
+            pass
+
+    # Specify the desired output JSON file name
+    output_file_name = 'code_search/parse.json'
+    save_results_to_json(results, output_file_name)
 
 if __name__ == '__main__':
     main()
