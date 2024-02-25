@@ -1,6 +1,7 @@
 import ast  # Documentation: https://docs.python.org/3/library/ast.html
 import json
 import os
+import sys
 from urllib.request import urlopen
 
 class Finder(ast.NodeVisitor):
@@ -95,6 +96,7 @@ class Finder(ast.NodeVisitor):
                     #         print("      }")
                     # print("    ]")
             else: 
+                continue
                 print(f"  - Keyword Arg: {kw.arg} = {ast.dump(kw.value)}")
             
 def find_openai_chatcompletions_calls(code):
@@ -114,27 +116,45 @@ def save_results_to_json(results, file_path):
         json.dump(results, file, indent=4)
 
 def main():
-    # Main processing logic
-    py_urls = parse_py_files_from_json('code_search/raw_data_all.json')
-    # py_urls = ["https://raw.githubusercontent.com/MLNLP-World/AI-Paper-Collector/477ef2aec293e07156f386d7dccd27fa2c1af295/app.py"]
     results = []
-    
-    for url in py_urls:
-        try:
-            response = urlopen(url)
-            content = response.read().decode('utf-8')
-            interactions = find_openai_chatcompletions_calls(content)
-            results.append({
-                "url": url,
-                "create_calls": interactions
-            })
-        except Exception as e:
-            print(f"Error downloading or parsing {url}: {e}")
-            pass
+    if 'p' in sys.argv[1]:
+        with open('repos/repos.txt') as repos:
+            for line in repos.readlines():
+                fn, repo_name, repo_path = line.strip()[1:-1].split(', ')
+                fn = fn[1:-1]
+                if fn.endswith('.py'):
+                    try:
+                        with open(f'repos/{fn}', 'r') as f:
+                            code = f.read()
+                        try:
+                            interactions = find_openai_chatcompletions_calls(code)
+                            results.append({
+                                "url": f'https://raw.githubusercontent.com/{repo_name[1:-1]}/main/{repo_path[1:-1]}',
+                                "create_calls": interactions
+                            })
+                        except:
+                            print(f'error in {repo_name}, {fn}')
+                            continue
+                    except FileNotFoundError:
+                        print(f'cannot find file {fn}')
+                        continue
+    elif 'j' in sys.argv[1]:
+        py_urls = parse_py_files_from_json('code_search/raw_data_all.json')
+        
+        for url in py_urls:
+            try:
+                response = urlopen(url)
+                content = response.read().decode('utf-8')
+                interactions = find_openai_chatcompletions_calls(content)
+                results.append({
+                    "url": url,
+                    "create_calls": interactions
+                })
+            except Exception as e:
+                print(f"Error downloading or parsing {url}: {e}")
+                pass
 
-    # Specify the desired output JSON file name
-    output_file_name = 'code_search/parse.json'
-    save_results_to_json(results, output_file_name)
+    save_results_to_json(results, 'parse.json')
 
     #statistics: position/length, prompt length, number of insertions, position of insertions (exact position and percentage position), percentage of insertions within a prompt, the more flexible the insertions are the better, closer to the beginning
 
