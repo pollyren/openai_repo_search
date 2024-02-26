@@ -164,5 +164,7 @@ openai_token
 openai_jiang
 output/
 *.json
+*.txt
 .DS_Store
 repos
+repos2
